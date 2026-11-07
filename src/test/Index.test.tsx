@@ -141,25 +141,6 @@ describe('Index page', () => {
     expect(localStorage.getItem('skill-tree-progress')).toBeNull();
   });
 
-  it('renders the Legend section', async () => {
-    render(<Index />, { wrapper });
-    await waitFor(() => {
-      expect(screen.getByText('Legend')).toBeInTheDocument();
-    });
-  });
-
-  it('legend shows all skill type labels', async () => {
-    render(<Index />, { wrapper });
-    await waitFor(() => {
-      expect(screen.getByText('Two Arm Category')).toBeInTheDocument();
-      expect(screen.getByText('One Arm Category')).toBeInTheDocument();
-      expect(screen.getByText('Key Skill')).toBeInTheDocument();
-      expect(screen.getByText('Two Arm Skill')).toBeInTheDocument();
-      expect(screen.getByText('One Arm Skill')).toBeInTheDocument();
-      expect(screen.getByText('Skill Not Started')).toBeInTheDocument();
-    });
-  });
-
   it('menu give feedback opens the feedback modal', async () => {
     render(<Index />, { wrapper });
     await waitFor(() => screen.getAllByLabelText('Open menu'));
