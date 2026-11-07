@@ -2,6 +2,8 @@ import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 
 import { Skill } from '@/data/skillTreeData';
 import DraggableSkillNode from './DraggableSkillNode';
 import ConnectionLines from './ConnectionLines';
+import SkillSearch from './SkillSearch';
+import CelebrationBanner from './CelebrationBanner';
 
 // Lazy-load modals — they're only shown on user interaction, not on initial render
 const SkillModal = lazy(() => import('./SkillModal'));
@@ -11,7 +13,8 @@ import { useEditableSkillTree } from '@/hooks/useEditableSkillTree';
 import { useSheetSkills } from '@/hooks/useSheetSkills';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useOnboarding } from '@/hooks/useOnboarding';
-import { Minus, Plus, CircleHelp, MessageCircle, Map } from 'lucide-react';
+import { getLevel } from '@/lib/level';
+import { Minus, Plus, CircleHelp, MessageCircle, Map, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -20,20 +23,60 @@ import {
 } from '@/components/ui/tooltip';
 
 const DOT_BASE = 24; // base dot spacing in px at scale 1
+const VIEW_STORAGE_KEY = 'straps_tree_view';
+
+interface PersistedView { x: number; y: number; scale: number }
+
+function getPersistedView(isMobile: boolean): PersistedView {
+  const fallback = { x: isMobile ? 50 : -200, y: isMobile ? 50 : -100, scale: isMobile ? 0.5 : 0.8 };
+  try {
+    const saved = localStorage.getItem(VIEW_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (typeof parsed.x === 'number' && typeof parsed.y === 'number' && typeof parsed.scale === 'number') {
+        return parsed;
+      }
+    }
+  } catch {}
+  return fallback;
+}
 
 interface SkillTreeProps {
   onOpenFeedback?: () => void;
+  // Set from outside (the Favorites list in the Menu) to pan to + open a
+  // specific skill; cleared via onNavigatedToSkill once handled.
+  navigateToSkillId?: string | null;
+  onNavigatedToSkill?: () => void;
 }
 
-const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback }) => {
+const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback, navigateToSkillId, onNavigatedToSkill }) => {
   const isMobile = useIsMobile();
-  const [scale, setScale] = useState(isMobile ? 0.5 : 0.8);
-  const [position, setPosition] = useState({ x: isMobile ? 50 : -200, y: isMobile ? 50 : -100 });
+  // Resume the last pan/zoom position across visits instead of always
+  // resetting to the same default view.
+  const [scale, setScale] = useState(() => getPersistedView(isMobile).scale);
+  const [position, setPosition] = useState(() => {
+    const v = getPersistedView(isMobile);
+    return { x: v.x, y: v.y };
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [celebration, setCelebration] = useState<string | null>(null);
+  const [offlineBannerDismissed, setOfflineBannerDismissed] = useState(false);
+
+  // Persist pan/zoom so the next visit resumes where this one left off.
+  // Debounced so continuous desktop mouse-drag doesn't write on every frame.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify({ x: position.x, y: position.y, scale }));
+      } catch {}
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [position, scale]);
   // Onboarding state
   const { 
     showOnboarding, 
@@ -111,7 +154,7 @@ const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback }) => {
     getAvailableSkills,
   } = useSkillProgress();
 
-  const { data: sheetSkills } = useSheetSkills();
+  const { data: sheetSkills, isError: isSheetSkillsError } = useSheetSkills();
   const { skills } = useEditableSkillTree(sheetSkills);
 
   // Derive available skills — memoized so this O(n) parent-map build + ancestor
@@ -177,6 +220,17 @@ const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback }) => {
     }
     setScale(newScale);
   }, [scale, position]);
+
+  // Pan + zoom to center a specific skill in the viewport — used by search
+  // results and the Favorites list.
+  const panToSkill = useCallback((skill: Skill) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    const cx = rect ? rect.width / 2 : window.innerWidth / 2;
+    const cy = rect ? rect.height / 2 : window.innerHeight / 2;
+    const newScale = Math.max(scale, isMobile ? 0.6 : 0.9);
+    setScale(newScale);
+    setPosition({ x: cx - skill.x * newScale, y: cy - skill.y * newScale });
+  }, [scale, isMobile]);
 
   // Wheel zoom (desktop)
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -339,14 +393,44 @@ const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback }) => {
     }
   }, []);
 
+  // React to a navigation request from outside (the Favorites list in the
+  // Menu, a sibling of this component under Index.tsx) — pan to and open
+  // the target skill, then signal it's been handled.
+  useEffect(() => {
+    if (!navigateToSkillId) return;
+    const target = skills.find(s => s.id === navigateToSkillId);
+    if (target) {
+      panToSkill(target);
+      handleSkillClick(target);
+    }
+    onNavigatedToSkill?.();
+    // Only re-run when the requested id itself changes — panToSkill/
+    // handleSkillClick/skills identity changing shouldn't re-trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigateToSkillId]);
+
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
     setSelectedSkill(null);
   }, []);
 
   const handleToggleComplete = useCallback(() => {
-    if (selectedSkill) toggleSkillCompletion(selectedSkill.id);
-  }, [selectedSkill, toggleSkillCompletion]);
+    if (!selectedSkill) return;
+    const willComplete = !isSkillCompleted(selectedSkill.id);
+    if (willComplete) {
+      const levelBefore = getLevel(completedSkills.size, skills.length);
+      const newCompletedCount = completedSkills.size + 1;
+      const levelAfter = getLevel(newCompletedCount, skills.length);
+      if (newCompletedCount === skills.length) {
+        setCelebration("You've completed the tree! 🎉");
+      } else if (levelAfter !== levelBefore) {
+        setCelebration(`Level up! You're now a ${levelAfter.split(': ')[1] ?? levelAfter}`);
+      } else if (selectedSkill.type === 'key') {
+        setCelebration(`Key skill unlocked: ${selectedSkill.name} ✨`);
+      }
+    }
+    toggleSkillCompletion(selectedSkill.id);
+  }, [selectedSkill, toggleSkillCompletion, isSkillCompleted, completedSkills, skills]);
 
   const handleToggleFavorite = useCallback(() => {
     if (selectedSkill) toggleSkillFavorite(selectedSkill.id);
@@ -354,6 +438,43 @@ const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback }) => {
 
   return (
     <div className="relative w-full h-full overflow-hidden tree-canvas overscroll-none">
+
+      {/* Offline / stale-data notice */}
+      {isSheetSkillsError && !offlineBannerDismissed && (
+        <div className="absolute top-[90px] md:top-[68px] left-1/2 -translate-x-1/2 z-20 px-4 w-full flex justify-center pointer-events-none">
+          <div
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] text-white pointer-events-auto"
+            style={{ background: '#2b303b', border: '1px solid rgba(238,79,79,0.4)' }}
+          >
+            <span>Showing offline data — some details may be out of date.</span>
+            <button
+              onClick={() => setOfflineBannerDismissed(true)}
+              aria-label="Dismiss offline notice"
+              className="text-white/60 hover:text-white shrink-0"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Milestone celebration */}
+      {celebration && (
+        <CelebrationBanner message={celebration} onDismiss={() => setCelebration(null)} />
+      )}
+
+      {/* Search overlay */}
+      {showSearch && (
+        <SkillSearch
+          skills={skills}
+          onSelect={(skill) => {
+            setShowSearch(false);
+            panToSkill(skill);
+            handleSkillClick(skill);
+          }}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
 
       {/* Floating bottom toolbar */}
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20">
@@ -430,6 +551,15 @@ const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback }) => {
                 <span className="text-[8.8px] leading-[13.2px] tracking-[0.352px]">Legend</span>
               </button>
             </div>
+
+            {/* Search */}
+            <button
+              onClick={() => setShowSearch(true)}
+              className="flex flex-col items-center justify-center gap-[2px] w-[40px] h-full text-white/70 hover:text-white transition-colors overflow-hidden"
+            >
+              <Search size={20} />
+              <span className="text-[8.8px] leading-[13.2px] tracking-[0.352px]">Search</span>
+            </button>
 
             {/* Bugs */}
             <button

@@ -178,6 +178,15 @@
     box-shadow: none !important;
   }
 
+  /* Keyboard focus ring — the node is a real role="button" now, so it needs
+     a visible indicator for keyboard users even though outline is disabled
+     above for mouse/touch interactions. */
+  .skill-node:focus-visible {
+    outline: 2px solid hsl(270 70% 65%) !important;
+    outline-offset: 3px;
+    border-radius: 9999px;
+  }
+
   .skill-node-diamond {
     @apply w-full h-full;
     clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);

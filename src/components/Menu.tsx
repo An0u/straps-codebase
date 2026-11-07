@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ChevronLeft, X, Trophy, SlidersHorizontal, MessageCircle, ExternalLink, Handshake, Trash2 } from 'lucide-react';
+import { ChevronLeft, X, Trophy, SlidersHorizontal, MessageCircle, ExternalLink, Handshake, Trash2, Star } from 'lucide-react';
+import { Skill } from '@/data/skillTreeData';
 
 interface MenuProps {
   onClose: () => void;
@@ -9,6 +10,9 @@ interface MenuProps {
   totalSkills: number;
   level: string;
   progressPct: number;
+  skills: Skill[];
+  favoriteSkills: Set<string>;
+  onNavigateToSkill: (skillId: string) => void;
 }
 
 function getLevelDescription(level: string): string {
@@ -20,8 +24,21 @@ function getLevelDescription(level: string): string {
   return "You've just started your journey with straps.";
 }
 
-const Menu: React.FC<MenuProps> = ({ onClose, onReset, onOpenFeedback, completedCount, totalSkills, level, progressPct }) => {
+const Menu: React.FC<MenuProps> = ({
+  onClose,
+  onReset,
+  onOpenFeedback,
+  completedCount,
+  totalSkills,
+  level,
+  progressPct,
+  skills,
+  favoriteSkills,
+  onNavigateToSkill,
+}) => {
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showFavorites, setShowFavorites] = useState(false);
+  const favoritedSkills = skills.filter(s => favoriteSkills.has(s.id));
 
   const handleResetConfirm = () => {
     onReset();
@@ -101,6 +118,40 @@ const Menu: React.FC<MenuProps> = ({ onClose, onReset, onOpenFeedback, completed
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <span className="text-[12px] leading-[16px] px-3" style={{ color: '#818898' }}>Profile</span>
+
+              <button
+                onClick={() => setShowFavorites(v => !v)}
+                className="flex items-center gap-2 h-10 px-3 hover:bg-white/5 rounded-lg transition-colors w-full text-left"
+                aria-expanded={showFavorites}
+              >
+                <Star size={20} className="text-white shrink-0" />
+                <span className="text-white text-[14px] leading-[20px]">Favorites</span>
+                <span className="text-[12px] leading-[16px] ml-auto shrink-0" style={{ color: '#818898' }}>
+                  {favoritedSkills.length}
+                </span>
+              </button>
+
+              {showFavorites && (
+                <div className="flex flex-col gap-1 pl-3 pb-1">
+                  {favoritedSkills.length === 0 ? (
+                    <p className="text-[12px] leading-[16px] px-3 py-2" style={{ color: '#818898' }}>
+                      No favorites yet — tap the star on any skill to save it here.
+                    </p>
+                  ) : (
+                    favoritedSkills.map(skill => (
+                      <button
+                        key={skill.id}
+                        onClick={() => onNavigateToSkill(skill.id)}
+                        className="flex items-center gap-2 h-9 px-3 hover:bg-white/5 rounded-lg transition-colors w-full text-left"
+                      >
+                        <Star size={14} className="shrink-0 fill-skill-gold text-skill-gold" />
+                        <span className="text-white text-[13px] leading-[18px] truncate">{skill.name}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+
               <div className="flex items-center gap-2 h-10 px-3 opacity-50">
                 <Trophy size={20} className="text-white shrink-0" />
                 <span className="text-white text-[14px] leading-[20px]">Level</span>

@@ -10,6 +10,9 @@ const defaultProps = {
   totalSkills: 111,
   level: 'Level 1: Rookie',
   progressPct: 4.5,
+  skills: [],
+  favoriteSkills: new Set<string>(),
+  onNavigateToSkill: vi.fn(),
 };
 
 describe('Menu', () => {

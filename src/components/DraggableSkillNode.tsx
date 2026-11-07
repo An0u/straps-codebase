@@ -104,6 +104,24 @@ const DraggableSkillNode: React.FC<DraggableSkillNodeProps> = ({
     onClick();
   }, [onClick]);
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      e.stopPropagation();
+      onClick();
+    }
+  }, [onClick]);
+
+  // Covers what a sighted user reads from color/grayscale/glow — name,
+  // category vs key vs regular skill, and locked/available/completed state.
+  const stateLabel = isCategory ? 'category' : isCompleted ? 'completed' : isAvailable ? 'available' : 'locked';
+  const ariaLabel = [
+    skill.name,
+    !isCategory && isKey ? 'key skill' : null,
+    stateLabel,
+    isFavorite ? 'favorited' : null,
+  ].filter(Boolean).join(', ');
+
   return (
     <div
       className={cn(
@@ -120,7 +138,11 @@ const DraggableSkillNode: React.FC<DraggableSkillNodeProps> = ({
         zIndex: isAvailable ? 25 : 20,
         touchAction: 'none',
       }}
+      role="button"
+      tabIndex={0}
+      aria-label={ariaLabel}
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >

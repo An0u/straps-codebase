@@ -4,22 +4,13 @@ import FeedbackModal from '@/components/FeedbackModal';
 import { useSkillProgress } from '@/hooks/useSkillProgress';
 import { skillTreeData } from '@/data/skillTreeData';
 import { useSheetSkills } from '@/hooks/useSheetSkills';
+import { getLevel } from '@/lib/level';
 import { List, Trash2 } from 'lucide-react';
 
 const SkillTree = lazy(() => import('@/components/SkillTree'));
 
-function getLevel(completed: number, total: number): string {
-  const pct = total > 0 ? completed / total : 0;
-  if (pct >= 1) return 'Level 6: Master';
-  if (pct >= 0.75) return 'Level 5: Expert';
-  if (pct >= 0.5) return 'Level 4: Advanced';
-  if (pct >= 0.25) return 'Level 3: Intermediate';
-  if (pct >= 0.1) return 'Level 2: Beginner';
-  return 'Level 1: Rookie';
-}
-
 const Index: React.FC = () => {
-  const { completedSkills, resetProgress } = useSkillProgress();
+  const { completedSkills, favoriteSkills, resetProgress } = useSkillProgress();
   const { data: sheetSkills } = useSheetSkills();
   const skills = sheetSkills ?? skillTreeData;
   const totalSkills = skills.length;
@@ -30,6 +21,9 @@ const Index: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // Set from the Favorites list in Menu; SkillTree watches this and pans to
+  // + opens the target skill, then clears it via onNavigatedToSkill.
+  const [navigateToSkillId, setNavigateToSkillId] = useState<string | null>(null);
 
   const handleResetClick = () => {
     if (confirmReset) {
@@ -191,7 +185,11 @@ const Index: React.FC = () => {
             </div>
           </div>
         }>
-          <SkillTree onOpenFeedback={() => setFeedbackOpen(true)} />
+          <SkillTree
+            onOpenFeedback={() => setFeedbackOpen(true)}
+            navigateToSkillId={navigateToSkillId}
+            onNavigatedToSkill={() => setNavigateToSkillId(null)}
+          />
         </Suspense>
       </main>
 
@@ -211,6 +209,12 @@ const Index: React.FC = () => {
             totalSkills={totalSkills}
             level={level}
             progressPct={progressPct}
+            skills={skills}
+            favoriteSkills={favoriteSkills}
+            onNavigateToSkill={(skillId) => {
+              setMenuOpen(false);
+              setNavigateToSkillId(skillId);
+            }}
           />
         </div>
       )}
