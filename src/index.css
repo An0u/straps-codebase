@@ -173,7 +173,6 @@
   .skill-node {
     @apply relative cursor-pointer;
     transition: transform 0.3s ease, opacity 0.3s ease, filter 0.3s ease;
-    transform-style: preserve-3d;
     border: none !important;
     outline: none !important;
     box-shadow: none !important;

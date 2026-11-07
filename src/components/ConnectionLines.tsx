@@ -17,9 +17,10 @@ const ConnectionLines: React.FC<ConnectionLinesProps> = ({ skills, completedSkil
   const isMobile = useIsMobile();
   const treeWidth = treeBounds.maxX - treeBounds.minX;
   const treeHeight = treeBounds.maxY - treeBounds.minY;
-  const getSkillById = (skillId: string) => {
-    return skills.find(s => s.id === skillId);
-  };
+  // O(1) lookup instead of an O(n) scan per connection — this runs once per
+  // skill's connections, so a linear find() here makes the whole pass O(n×edges).
+  const skillsById = React.useMemo(() => new Map(skills.map(s => [s.id, s])), [skills]);
+  const getSkillById = (skillId: string) => skillsById.get(skillId);
 
   const getNodeRadius = (skill: Skill) => {
     // Return approximate radius based on node type

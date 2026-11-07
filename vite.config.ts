@@ -25,10 +25,8 @@ export default defineConfig({
           "vendor-ui": [
             "@radix-ui/react-dialog",
             "@radix-ui/react-tooltip",
-            "@radix-ui/react-progress",
             "@radix-ui/react-aspect-ratio",
             "@tanstack/react-query",
-            "sonner",
             "lucide-react",
           ],
         },

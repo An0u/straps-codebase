@@ -90,19 +90,15 @@ const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   // Ref to the inner transform div - we mutate its style directly during gestures
   const transformDivRef = useRef<HTMLDivElement>(null);
-  // Ref to the dot pattern layer - updated alongside the transform
-  const dotLayerRef = useRef<HTMLDivElement>(null);
-
-  // Apply transform directly to DOM - zero React overhead during gesture
+  // Apply transform directly to DOM - zero React overhead during gesture.
+  // The dot layer lives inside this same transformed container (see render
+  // below), so it pans/zooms for free via the GPU-composited transform
+  // instead of needing its own per-frame background-position/-size update
+  // (which would force a repaint of the full-screen gradient every frame).
   const applyTransformDirect = useCallback((x: number, y: number, s: number) => {
     liveTransform.current = { x, y, scale: s };
     if (transformDivRef.current) {
       transformDivRef.current.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
-    }
-    if (dotLayerRef.current) {
-      const spacing = DOT_BASE * s;
-      dotLayerRef.current.style.backgroundSize = `${spacing}px ${spacing}px`;
-      dotLayerRef.current.style.backgroundPosition = `${x % spacing}px ${y % spacing}px`;
     }
   }, []);
 
@@ -118,8 +114,13 @@ const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback }) => {
   const { data: sheetSkills } = useSheetSkills();
   const { skills } = useEditableSkillTree(sheetSkills);
 
-  // Derive available skills — updates any time completedSkills or skills change
-  const availableSkills = getAvailableSkills(skills);
+  // Derive available skills — memoized so this O(n) parent-map build + ancestor
+  // walk only re-runs when skills/completedSkills actually change, not on
+  // every unrelated re-render (opening the legend, opening a modal, etc).
+  const availableSkills = React.useMemo(
+    () => getAvailableSkills(skills),
+    [getAvailableSkills, skills]
+  );
 
   // Track container size so culling updates on window resize
   const [containerSize, setContainerSize] = React.useState({ w: window.innerWidth, h: window.innerHeight });
@@ -354,17 +355,6 @@ const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback }) => {
   return (
     <div className="relative w-full h-full overflow-hidden tree-canvas overscroll-none">
 
-      {/* Dot pattern layer — scales and pans with the board */}
-      <div
-        ref={dotLayerRef}
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px)',
-          backgroundSize: `${DOT_BASE * scale}px ${DOT_BASE * scale}px`,
-          backgroundPosition: `${position.x % (DOT_BASE * scale)}px ${position.y % (DOT_BASE * scale)}px`,
-        }}
-      />
-
       {/* Floating bottom toolbar */}
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20">
         <div
@@ -489,6 +479,21 @@ const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback }) => {
             willChange: isDragging ? 'transform' : 'auto',
           }}
         >
+          {/* Dot pattern layer — part of the transformed content, so it pans
+              and zooms via the same GPU-composited transform as everything
+              else instead of a per-frame background-position/-size repaint. */}
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              left: treeBounds.minX,
+              top: treeBounds.minY,
+              width: treeWidth,
+              height: treeHeight,
+              backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px)',
+              backgroundSize: `${DOT_BASE}px ${DOT_BASE}px`,
+            }}
+          />
+
           <ConnectionLines skills={skills} completedSkills={completedSkills} treeBounds={treeBounds} />
 
           {!treeReady && (
