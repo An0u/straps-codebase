@@ -35,3 +35,9 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## License
+
+This project is licensed under [Creative Commons Attribution 4.0 (CC BY 4.0)](LICENSE).
+You're free to share and adapt it, including commercially, as long as you give
+appropriate credit to Renata Dima / The Strapstree.
+
