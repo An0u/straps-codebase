@@ -12,12 +12,15 @@ let fixture: {
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: (table: keyof typeof fixture) => ({
-      select: () => Promise.resolve({ data: fixture[table], error: null }),
+      select: () => ({
+        range: (from: number, to: number) =>
+          Promise.resolve({ data: (fixture[table] as unknown[]).slice(from, to + 1), error: null }),
+      }),
     }),
   },
 }));
 
-import { fetchAndMerge } from '@/hooks/useSheetSkills';
+import { fetchAndMerge, PAGE_SIZE } from '@/hooks/useSheetSkills';
 
 function resetFixture() {
   fixture = { categories: [], groups: [], subgroups: [], skills: [] };
@@ -106,5 +109,54 @@ describe('fetchAndMerge', () => {
     expect(subgroup.connections).toContain('one-extra-skill');
     expect(skill.type).toBe('key');
     expect(skill.isGoldBorder).toBe(true);
+  });
+
+  it('paginates past the Supabase page-size cap instead of truncating', async () => {
+    resetFixture();
+    // A chain of PAGE_SIZE + 1 skills under an existing subgroup — if
+    // pagination weren't working, only the first PAGE_SIZE would come back.
+    fixture.subgroups = [{ id: 1, slug: 'two-spin-normal', name: 'Normal', group_id: 1 }];
+    fixture.skills = [
+      { id: 0, slug: 'flare', name: 'Flare', is_key_skill: false, direction: 'Right', link: null, description: null, connects_to: null, subgroup_id: 1 },
+    ];
+    // All chain directly off the already-local 'flare' node (id 0) so the
+    // merge resolves in one pass — this test is about pagination, not the
+    // resolution loop's convergence.
+    for (let i = 1; i <= PAGE_SIZE; i++) {
+      fixture.skills.push({
+        id: i,
+        slug: `chain-${i}`,
+        name: `Chain ${i}`,
+        is_key_skill: false,
+        direction: 'Right',
+        link: null,
+        description: null,
+        connects_to: 0,
+        subgroup_id: 1,
+      });
+    }
+
+    const merged = await fetchAndMerge();
+    expect(merged.find(s => s.id === `chain-${PAGE_SIZE}`)).toBeDefined();
+  });
+
+  it('logs a warning instead of silently dropping an unresolvable skill', async () => {
+    resetFixture();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fixture.subgroups = [{ id: 1, slug: 'two-spin-normal', name: 'Normal', group_id: 1 }];
+    fixture.skills = [
+      // connects_to references an id that doesn't exist in this fixture —
+      // can never resolve to a parent.
+      { id: 1, slug: 'orphan-skill', name: 'Orphan', is_key_skill: false, direction: 'Right', link: null, description: null, connects_to: 999, subgroup_id: 1 },
+    ];
+
+    const merged = await fetchAndMerge();
+
+    expect(merged.find(s => s.id === 'orphan-skill')).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[useSheetSkills]'),
+      expect.objectContaining({ skills: ['orphan-skill'] })
+    );
+    warnSpy.mockRestore();
   });
 });

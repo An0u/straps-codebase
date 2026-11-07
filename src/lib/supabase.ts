@@ -10,20 +10,3 @@ if (!url || !anonKey) {
 export const supabase = createClient(url, anonKey, {
   auth: { persistSession: false },
 });
-
-export type SkillRow = {
-  id: number;
-  name: string;
-  is_key_skill: boolean;
-  direction: 'Left' | 'Right' | 'Down' | 'Up';
-  link: string | null;
-  description: string | null;
-  connects_to: number | null;
-  subgroups: {
-    name: string;
-    groups: {
-      name: string;
-      categories: { name: string };
-    };
-  } | null;
-};

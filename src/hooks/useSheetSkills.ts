@@ -28,6 +28,11 @@ interface SkillRecord {
   videoUrl: string;
   description: string;
   connectsToSlug: string | null;
+  // True when connects_to was set but didn't resolve to any known skill (a
+  // typo'd id, a reference to a since-deleted row) — distinct from
+  // connects_to genuinely being null (first skill in its subgroup), so a
+  // bad reference doesn't get silently reparented to the subgroup instead.
+  hasUnresolvedParent: boolean;
   subgroupSlug: string | null;
 }
 
@@ -39,23 +44,32 @@ interface PendingHierarchyNode {
   direction: Direction | null;
 }
 
+// The Supabase REST API caps a single request at this many rows (this
+// project's PostgREST max_rows). Fetch in pages so growing past the cap
+// doesn't silently truncate the tree.
+export const PAGE_SIZE = 1000;
+
+async function fetchAllRows<T>(table: string, columns: string): Promise<T[]> {
+  const rows: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase.from(table).select(columns).range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const batch = (data ?? []) as T[];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return rows;
+}
+
 async function fetchAllFromSupabase() {
-  const [catsRes, groupsRes, subsRes, skillsRes] = await Promise.all([
-    supabase.from('categories').select('id, slug, name, direction'),
-    supabase.from('groups').select('id, slug, name, category_id'),
-    supabase.from('subgroups').select('id, slug, name, group_id'),
-    supabase.from('skills').select('id, slug, name, is_key_skill, direction, link, description, connects_to, subgroup_id'),
+  const [categories, groups, subgroups, skillRows] = await Promise.all([
+    fetchAllRows<CategoryRow>('categories', 'id, slug, name, direction'),
+    fetchAllRows<GroupRow>('groups', 'id, slug, name, category_id'),
+    fetchAllRows<SubgroupRow>('subgroups', 'id, slug, name, group_id'),
+    fetchAllRows<SkillRow>('skills', 'id, slug, name, is_key_skill, direction, link, description, connects_to, subgroup_id'),
   ]);
-
-  if (catsRes.error)   throw catsRes.error;
-  if (groupsRes.error) throw groupsRes.error;
-  if (subsRes.error)   throw subsRes.error;
-  if (skillsRes.error) throw skillsRes.error;
-
-  const categories = (catsRes.data   ?? []) as CategoryRow[];
-  const groups     = (groupsRes.data ?? []) as GroupRow[];
-  const subgroups  = (subsRes.data   ?? []) as SubgroupRow[];
-  const skillRows  = (skillsRes.data ?? []) as SkillRow[];
 
   const categoryById = new Map(categories.map(c => [c.id, c]));
   const groupById    = new Map(groups.map(g => [g.id, g]));
@@ -96,16 +110,20 @@ async function fetchAllFromSupabase() {
   const idToSlug = new Map<number, string>();
   skillRows.forEach(r => idToSlug.set(r.id, r.slug));
 
-  const skills: SkillRecord[] = skillRows.map(row => ({
-    slug: row.slug,
-    name: row.name,
-    isKey: row.is_key_skill,
-    direction: row.direction,
-    videoUrl: row.link ?? '',
-    description: row.description ?? '',
-    connectsToSlug: row.connects_to != null ? idToSlug.get(row.connects_to) ?? null : null,
-    subgroupSlug: subgroupById.get(row.subgroup_id)?.slug ?? null,
-  }));
+  const skills: SkillRecord[] = skillRows.map(row => {
+    const connectsToSlug = row.connects_to != null ? idToSlug.get(row.connects_to) ?? null : null;
+    return {
+      slug: row.slug,
+      name: row.name,
+      isKey: row.is_key_skill,
+      direction: row.direction,
+      videoUrl: row.link ?? '',
+      description: row.description ?? '',
+      connectsToSlug,
+      hasUnresolvedParent: row.connects_to != null && connectsToSlug === null,
+      subgroupSlug: subgroupById.get(row.subgroup_id)?.slug ?? null,
+    };
+  });
 
   return { skills, slugToName, pendingGroups, pendingSubgroups };
 }
@@ -256,6 +274,10 @@ export async function fetchAndMerge(): Promise<Skill[]> {
 
     for (const dbSkill of skills) {
       if (localSlugs.has(dbSkill.slug) || mergedBySlug.has(dbSkill.slug)) continue;
+      // A connects_to that was set but didn't resolve to any known skill is
+      // a bad reference, not "no parent" — leave it unresolved (and logged
+      // below) rather than silently reparenting it to the subgroup.
+      if (dbSkill.hasUnresolvedParent) continue;
       // A skill with no connects_to is the first in its subgroup — attach it
       // to the subgroup node itself instead of a sibling skill.
       const parentSlug = dbSkill.connectsToSlug ?? dbSkill.subgroupSlug;
@@ -284,6 +306,24 @@ export async function fetchAndMerge(): Promise<Skill[]> {
     }
   }
 
+  // Anything still unresolved has a parent slug that never appeared in the
+  // tree — a typo'd FK, a self-reference, or a cycle between two new rows.
+  // Log it rather than silently dropping it, so a bad edit is diagnosable.
+  const unresolvedGroups = pendingGroups.filter(g => !mergedBySlug.has(g.slug));
+  const unresolvedSubgroups = pendingSubgroups.filter(s => !mergedBySlug.has(s.slug));
+  const unresolvedSkills = skills.filter(s => !localSlugs.has(s.slug) && !mergedBySlug.has(s.slug));
+  if (unresolvedGroups.length || unresolvedSubgroups.length || unresolvedSkills.length) {
+    console.warn(
+      '[useSheetSkills] Could not place these rows in the tree — check their parent reference ' +
+      '(category_id/group_id/subgroup_id/connects_to) for a typo, a self-reference, or a cycle:',
+      {
+        groups: unresolvedGroups.map(g => g.slug),
+        subgroups: unresolvedSubgroups.map(s => s.slug),
+        skills: unresolvedSkills.map(s => s.slug),
+      }
+    );
+  }
+
   return merged;
 }
 
@@ -291,9 +331,10 @@ export const useSheetSkills = () => {
   return useQuery({
     queryKey: ['supabase-skills'],
     queryFn: fetchAndMerge,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
+    // This is mostly-static reference data an admin edits occasionally —
+    // no need to re-fetch from scratch (and flash the undecorated local
+    // fallback) on every mount and every window focus. 5 min matches the
+    // app's global QueryClient default.
+    staleTime: 1000 * 60 * 5,
   });
 };

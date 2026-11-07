@@ -1214,13 +1214,3 @@ export const skillTreeData: Skill[] = [
     connections: []
   }
 ];
-
-export const getSkillById = (id: string): Skill | undefined => {
-  return skillTreeData.find(skill => skill.id === id);
-};
-
-export const getPrerequisiteSkills = (skill: Skill): Skill[] => {
-  return skill.prerequisites
-    .map(prereqId => getSkillById(prereqId))
-    .filter((s): s is Skill => s !== undefined);
-};
