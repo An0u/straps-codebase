@@ -181,6 +181,9 @@ const Menu: React.FC<MenuProps> = ({ onClose, onReset, onOpenFeedback, completed
                 <p className="text-white text-[14px] leading-[20px]">
                   Alvaro Medrano, Mathis Machure, Garrett Schniewind, Julian Mctaggart
                 </p>
+                <p className="text-[11px] leading-[16px] mt-1" style={{ color: '#818898' }}>
+                  © {new Date().getFullYear()} Renata Dima / The Strapstree. All rights reserved.
+                </p>
               </div>
             </div>
 
