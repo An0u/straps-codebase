@@ -14,7 +14,7 @@ import { useSheetSkills } from '@/hooks/useSheetSkills';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { getLevel } from '@/lib/level';
-import { Minus, Plus, CircleHelp, MessageCircle, Map, Search, X } from 'lucide-react';
+import { Minus, Plus, CircleHelp, MessageCircle, Map, Search, X, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -517,7 +517,7 @@ const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback, navigateToSkillId
             <div className="relative">
               {showLegend && (
                 <div
-                  className="absolute bottom-full mb-5 left-1/2 -translate-x-1/2 rounded-xl p-4 w-44 z-30"
+                  className="absolute bottom-full mb-5 left-1/2 -translate-x-1/2 rounded-xl p-4 w-48 z-30"
                   style={{ background: '#1a1d23', border: '1px solid #2b303b' }}
                 >
                   <h3 className="text-sm font-medium text-white mb-3">Legend</h3>
@@ -539,6 +539,23 @@ const SkillTree: React.FC<SkillTreeProps> = ({ onOpenFeedback, navigateToSkillId
                     <div className="flex items-center gap-2">
                       <img src="/shapes/regular-purple.svg" alt="" className="w-5 h-5" />
                       <span className="text-white/60">One arm</span>
+                    </div>
+                    <p className="text-white font-medium pt-1">Status</p>
+                    <div className="flex items-center gap-2">
+                      <img src="/shapes/regular-purple.svg" alt="" className="w-5 h-5" />
+                      <span className="text-white/60">Completed</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <img src="/shapes/regular-purple.svg" alt="" className="w-5 h-5 skill-node-grayscale" />
+                      <span className="text-white/60">Not yet completed</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <img src="/shapes/key-blue-new.svg" alt="" className="w-5 h-5 skill-node-svg-glow-gold" />
+                      <span className="text-white/60">Key skill</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Star size={16} className="shrink-0 fill-skill-gold text-skill-gold" />
+                      <span className="text-white/60">Favorited</span>
                     </div>
                   </div>
                 </div>

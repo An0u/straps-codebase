@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronLeft, X, Trophy, SlidersHorizontal, MessageCircle, ExternalLink, Handshake, Trash2, Star } from 'lucide-react';
 import { Skill } from '@/data/skillTreeData';
+import { getNextLevelProgress } from '@/lib/level';
 
 interface MenuProps {
   onClose: () => void;
@@ -38,6 +39,10 @@ const Menu: React.FC<MenuProps> = ({
 }) => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [showFavorites, setShowFavorites] = useState(false);
+  const nextLevel = getNextLevelProgress(completedCount, totalSkills);
+  const nextLevelText = nextLevel
+    ? `${nextLevel.skillsNeeded} more skill${nextLevel.skillsNeeded === 1 ? '' : 's'} to reach ${nextLevel.nextLevelName}`
+    : "You've mastered every skill!";
   const favoritedSkills = skills.filter(s => favoriteSkills.has(s.id));
 
   const handleResetConfirm = () => {
@@ -107,6 +112,9 @@ const Menu: React.FC<MenuProps> = ({
             </div>
             <p className="text-[12px] leading-[16px] opacity-90" style={{ color: '#818898' }}>
               {getLevelDescription(level)}
+            </p>
+            <p className="text-[12px] leading-[16px] font-medium" style={{ color: '#9952e0' }}>
+              {nextLevelText}
             </p>
           </div>
         </div>
